@@ -399,7 +399,6 @@ fn main() {
         }
         info!("make: running {} in {:?}", make, build_dir);
         run(&mut cmd);
-        warning!("make completed successfully",);
     }
 
     // Skip watching this environment variables to avoid rebuild in CI.
@@ -432,25 +431,8 @@ fn main() {
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }
-        warning!("make install_lib_static install_include starting...",);
+        info!("make: install_lib_static install_include starting...");
         run(cmd.arg("install_lib_static").arg("install_include"));
-        warning!("make install completed",);
-    }
-
-    // Debug: check library exists before linking
-    let lib_dir = build_dir.join("lib");
-    warning!("lib dir: {:?}", lib_dir);
-    if let Ok(entries) = std::fs::read_dir(&lib_dir) {
-        for entry in entries.flatten() {
-            warning!("  lib entry: {:?}", entry.path());
-        }
-    }
-    let out_lib_dir = out_dir.join("lib");
-    warning!("out lib dir: {:?}", out_lib_dir);
-    if let Ok(entries) = std::fs::read_dir(&out_lib_dir) {
-        for entry in entries.flatten() {
-            warning!("  out lib entry: {:?}", entry.path());
-        }
     }
 
     println!("cargo:root={}", out_dir.display());
@@ -463,7 +445,7 @@ fn main() {
     // intrinsics that are libgcc specific (e.g. those intrinsics aren't present in
     // libcompiler-rt), so link that in to get that support.
     if target.contains("windows") {
-        println!("cargo:rustc-link-lib=static=jemalloc");
+        println!("cargo:rustc-link-lib=static=jemalloc_s");
     } else {
         println!("cargo:rustc-link-lib=static=jemalloc_pic");
     }

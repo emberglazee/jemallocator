@@ -374,7 +374,8 @@ fn main() {
         run(cmd.arg("tests"));
 
         // Run tests:
-        let mut cmd = Command::new(make).current_dir(&build_dir);
+        let mut cmd = Command::new(make);
+        cmd.current_dir(&build_dir);
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }

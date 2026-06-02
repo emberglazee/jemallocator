@@ -463,8 +463,8 @@ fn execute(cmd: &mut Command, on_fail: impl FnOnce()) {
 
 fn gnu_target(target: &str) -> String {
     match target {
-        "i686-pc-windows-msvc" => "i686-pc-win32".to_string(),
-        "x86_64-pc-windows-msvc" => "x86_64-pc-win32".to_string(),
+        "i686-pc-windows-msvc" => "i686-w64-mingw32".to_string(),
+        "x86_64-pc-windows-msvc" => "x86_64-w64-mingw32".to_string(),
         "i686-pc-windows-gnu" => "i686-w64-mingw32".to_string(),
         "x86_64-pc-windows-gnu" => "x86_64-w64-mingw32".to_string(),
         "armv7-linux-androideabi" => "arm-linux-androideabi".to_string(),

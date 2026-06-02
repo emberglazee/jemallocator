@@ -353,25 +353,42 @@ fn main() {
 
     // Make:
     let make = make_cmd(&host);
-    run(&mut make_command(make, &build_dir, &num_jobs));
+    {
+        let mut cmd = make_command(make, &build_dir, &num_jobs);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
+        run(&mut cmd);
+    }
 
     // Skip watching this environment variables to avoid rebuild in CI.
     if env::var("JEMALLOC_SYS_RUN_JEMALLOC_TESTS").is_ok() {
         info!("Building and running jemalloc tests...");
 
         let mut cmd = make_command(make, &build_dir, &num_jobs);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
 
         // Make tests:
         run(cmd.arg("tests"));
 
         // Run tests:
-        run(Command::new(make).current_dir(&build_dir).arg("check"));
+        let mut cmd = Command::new(make).current_dir(&build_dir);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
+        run(cmd.arg("check"));
     }
 
     // Make install:
-    run(make_command(make, &build_dir, &num_jobs)
-        .arg("install_lib_static")
-        .arg("install_include"));
+    {
+        let mut cmd = make_command(make, &build_dir, &num_jobs);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
+        run(cmd.arg("install_lib_static").arg("install_include"));
+    }
 
     println!("cargo:root={}", out_dir.display());
 

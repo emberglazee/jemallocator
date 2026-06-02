@@ -18,6 +18,36 @@ use std::{
 
 include!("src/env.rs");
 
+/// Convert a path to its 8.3 short form on Windows to avoid
+/// space-splitting when passed through `sh`/configure scripts.
+#[cfg(target_os = "windows")]
+fn make_cc_safe(path: &std::ffi::OsStr) -> std::ffi::OsString {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    extern "system" {
+        fn GetShortPathNameW(
+            lpszLongPath: *const u16,
+            lpszShortPath: *mut u16,
+            cchBuffer: u32,
+        ) -> u32;
+    }
+    let wide: Vec<u16> = path.encode_wide().chain(std::iter::once(0)).collect();
+    let mut buf = vec![0u16; 260];
+    let len = unsafe {
+        GetShortPathNameW(wide.as_ptr(), buf.as_mut_ptr(), buf.len() as u32)
+    };
+    if len > 0 && (len as usize) < buf.len() {
+        buf.truncate(len as usize);
+        OsStringExt::from_wide(&buf)
+    } else {
+        path.to_os_string()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn make_cc_safe(path: &std::ffi::OsStr) -> std::ffi::OsString {
+    path.to_os_string()
+}
+
 macro_rules! info {
     ($($args:tt)*) => { println!($($args)*) }
 }
@@ -208,7 +238,7 @@ fn main() {
             .replace('\\', "/"),
     )
     .current_dir(&build_dir)
-    .env("CC", &cc)
+    .env("CC", &make_cc_safe(&cc))
     .env("CFLAGS", &cflags)
     .env("LDFLAGS", &ldflags)
     .env("CPPFLAGS", &cppflags)

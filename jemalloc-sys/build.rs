@@ -46,6 +46,23 @@ fn make_cc_safe(path: &std::ffi::OsStr) -> std::ffi::OsString {
     path.to_os_string()
 }
 
+/// Convert all entries in a PATH-like string to short 8.3 form on Windows.
+/// This prevents MSYS2 bash from splitting on spaces in paths like
+/// `C:\Program Files\Microsoft Visual Studio\...`.
+#[cfg(target_os = "windows")]
+fn make_path_safe(path_str: &std::ffi::OsStr) -> OsString {
+    use std::os::windows::ffi::OsStringExt;
+    let entries: Vec<OsString> = std::env::split_paths(path_str)
+        .map(|p| make_cc_safe(p.as_os_str()))
+        .collect();
+    std::env::join_paths(entries).unwrap_or_else(|_| path_str.to_os_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn make_path_safe(path_str: &std::ffi::OsStr) -> OsString {
+    path_str.to_os_string()
+}
+
 macro_rules! info {
     ($($args:tt)*) => { println!($($args)*) }
 }
@@ -208,7 +225,19 @@ fn main() {
             info!("msvc_env: (none captured — will fall back to process env)");
         }
         info!("msvc_env: captured {} env vars from cc Tool", envs.len());
-        envs
+        // Sanitize PATH entries to short 8.3 form to prevent MSYS2
+        // bash from splitting on spaces (e.g. "C:/Program Files/...").
+        envs.into_iter()
+            .map(|(k, v)| {
+                if k.to_str() == Some("PATH") || k.to_str() == Some("Path") {
+                    let safe = make_path_safe(&v);
+                    info!("msvc_env: PATH sanitized: {:?} -> {:?}", v, safe);
+                    (k, safe)
+                } else {
+                    (k, v)
+                }
+            })
+            .collect()
     };
 
     assert!(out_dir.exists(), "OUT_DIR does not exist");

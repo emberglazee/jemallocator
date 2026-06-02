@@ -6,7 +6,7 @@ set -ex
 
 # test-dylib uses Unix-only dlfcn.h / dladdr / -shared flag — exclude on Windows
 case "${TARGET}" in
-    *windows*) set -- --exclude test-dylib ;;
+    *windows*) set -- --exclude test-dylib --exclude tikv-jemalloc-ctl ;;
     *)         set -- ;;
 esac
 

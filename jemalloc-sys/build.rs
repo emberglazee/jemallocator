@@ -51,7 +51,6 @@ fn make_cc_safe(path: &std::ffi::OsStr) -> std::ffi::OsString {
 /// `C:\Program Files\Microsoft Visual Studio\...`.
 #[cfg(target_os = "windows")]
 fn make_path_safe(path_str: &std::ffi::OsStr) -> OsString {
-    use std::os::windows::ffi::OsStringExt;
     let entries: Vec<OsString> = std::env::split_paths(path_str)
         .map(|p| make_cc_safe(p.as_os_str()))
         .collect();
@@ -398,7 +397,9 @@ fn main() {
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }
+        info!("make: running {} in {:?}", make, build_dir);
         run(&mut cmd);
+        warning!("make completed successfully",);
     }
 
     // Skip watching this environment variables to avoid rebuild in CI.
@@ -431,7 +432,25 @@ fn main() {
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }
+        warning!("make install_lib_static install_include starting...",);
         run(cmd.arg("install_lib_static").arg("install_include"));
+        warning!("make install completed",);
+    }
+
+    // Debug: check library exists before linking
+    let lib_dir = build_dir.join("lib");
+    warning!("lib dir: {:?}", lib_dir);
+    if let Ok(entries) = std::fs::read_dir(&lib_dir) {
+        for entry in entries.flatten() {
+            warning!("  lib entry: {:?}", entry.path());
+        }
+    }
+    let out_lib_dir = out_dir.join("lib");
+    warning!("out lib dir: {:?}", out_lib_dir);
+    if let Ok(entries) = std::fs::read_dir(&out_lib_dir) {
+        for entry in entries.flatten() {
+            warning!("  out lib entry: {:?}", entry.path());
+        }
     }
 
     println!("cargo:root={}", out_dir.display());

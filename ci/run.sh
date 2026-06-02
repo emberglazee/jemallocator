@@ -30,27 +30,27 @@ else
     export JEMALLOC_SYS_RUN_JEMALLOC_TESTS=1
 fi
 
-cargo build --target "${TARGET}" "$@"
-cargo test --target "${TARGET}" "$@"
-cargo test --target "${TARGET}" "$@" --features profiling
-cargo test --target "${TARGET}" "$@" --features debug
-cargo test --target "${TARGET}" "$@" --features stats
-cargo test --target "${TARGET}" "$@" --features 'debug profiling'
+cargo build --workspace --target "${TARGET}" "$@"
+cargo test --workspace --target "${TARGET}" "$@"
+cargo test --workspace --target "${TARGET}" "$@" --features profiling
+cargo test --workspace --target "${TARGET}" "$@" --features debug
+cargo test --workspace --target "${TARGET}" "$@" --features stats
+cargo test --workspace --target "${TARGET}" "$@" --features 'debug profiling'
 
-cargo test --target "${TARGET}" "$@" \
+cargo test --workspace --target "${TARGET}" "$@" \
     --features override_allocator_on_supported_platforms
-cargo test --target "${TARGET}" "$@" --no-default-features
-cargo test --target "${TARGET}" "$@" --no-default-features \
+cargo test --workspace --target "${TARGET}" "$@" --no-default-features
+cargo test --workspace --target "${TARGET}" "$@" --no-default-features \
     --features background_threads_runtime_support
 
 if [ "${NOBGT}" = "1" ]
 then
     echo "enabling background threads by default at run-time is not tested"
 else
-    cargo test --target "${TARGET}" "$@" --features background_threads
+    cargo test --workspace --target "${TARGET}" "$@" --features background_threads
 fi
 
-cargo test --target "${TARGET}" "$@" --release
+cargo test --workspace --target "${TARGET}" "$@" --release
 cargo test --target "${TARGET}" --manifest-path jemalloc-sys/Cargo.toml
 cargo test --target "${TARGET}" \
              --manifest-path jemalloc-sys/Cargo.toml \

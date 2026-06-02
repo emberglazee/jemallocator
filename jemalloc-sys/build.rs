@@ -199,10 +199,17 @@ fn main() {
     // find MSVCRT.lib during the C-compiler-works test.
     let msvc_env: Vec<(OsString, OsString)> = {
         let cc_cmd = compiler.to_command();
-        cc_cmd
+        let envs: Vec<_> = cc_cmd
             .get_envs()
             .filter_map(|(k, v)| v.map(|v| (k.to_owned(), v.to_owned())))
-            .collect()
+            .collect();
+        for (k, v) in &envs {
+            info!("msvc_env: {:?}={:?}", k, v);
+        }
+        if envs.is_empty() {
+            info!("msvc_env: (none captured — will fall back to process env)");
+        }
+        envs
     };
 
     assert!(out_dir.exists(), "OUT_DIR does not exist");

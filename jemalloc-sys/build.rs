@@ -193,6 +193,18 @@ fn main() {
     info!("CC={:?}", compiler.path());
     info!("CFLAGS={:?}", cflags);
 
+    // On MSVC targets, the cc crate sets up LIB, INCLUDE, and PATH
+    // environment variables internally (via find-msvc-tools). Forward
+    // these to configure — otherwise `sh` → configure → cl.exe won't
+    // find MSVCRT.lib during the C-compiler-works test.
+    let msvc_env: Vec<(OsString, OsString)> = {
+        let cc_cmd = compiler.to_command();
+        cc_cmd
+            .get_envs()
+            .filter_map(|(k, v)| v.map(|v| (k.to_owned(), v.to_owned())))
+            .collect()
+    };
+
     assert!(out_dir.exists(), "OUT_DIR does not exist");
     let jemalloc_repo_dir = PathBuf::from("jemalloc");
     info!("JEMALLOC_REPO_DIR={:?}", jemalloc_repo_dir);
@@ -228,8 +240,11 @@ fn main() {
     .env("CC", make_cc_safe(compiler.path().as_os_str()))
     .env("CFLAGS", cflags.clone())
     .env("LDFLAGS", cflags.clone())
-    .env("CPPFLAGS", cflags)
-    .arg(format!("--with-version={je_version}"))
+    .env("CPPFLAGS", cflags);
+    for (k, v) in &msvc_env {
+        cmd.env(k, v);
+    }
+    cmd.arg(format!("--with-version={je_version}"))
     .arg("--disable-cxx")
     .arg("--enable-doc=no")
     .arg("--enable-shared=no");

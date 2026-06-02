@@ -209,10 +209,15 @@ fn main() {
         if envs.is_empty() {
             info!("msvc_env: (none captured — will fall back to process env)");
         }
+        info!("msvc_env: captured {} env vars from cc Tool", envs.len());
         envs
     };
 
     assert!(out_dir.exists(), "OUT_DIR does not exist");
+
+    let cc_safe = make_cc_safe(compiler.path().as_os_str());
+    info!("CC_SAFE={:?}", cc_safe);
+
     let jemalloc_repo_dir = PathBuf::from("jemalloc");
     info!("JEMALLOC_REPO_DIR={:?}", jemalloc_repo_dir);
 
@@ -244,7 +249,7 @@ fn main() {
             .replace('\\', "/"),
     )
     .current_dir(&build_dir)
-    .env("CC", make_cc_safe(compiler.path().as_os_str()))
+    .env("CC", &cc_safe)
     .env("CFLAGS", cflags.clone())
     .env("LDFLAGS", cflags.clone())
     .env("CPPFLAGS", cflags);
@@ -362,6 +367,7 @@ fn main() {
     let make = make_cmd(&host);
     {
         let mut cmd = make_command(make, &build_dir, &num_jobs);
+        cmd.env("CC", &cc_safe);
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }
@@ -373,6 +379,7 @@ fn main() {
         info!("Building and running jemalloc tests...");
 
         let mut cmd = make_command(make, &build_dir, &num_jobs);
+        cmd.env("CC", &cc_safe);
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }
@@ -383,6 +390,7 @@ fn main() {
         // Run tests:
         let mut cmd = Command::new(make);
         cmd.current_dir(&build_dir);
+        cmd.env("CC", &cc_safe);
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }
@@ -392,6 +400,7 @@ fn main() {
     // Make install:
     {
         let mut cmd = make_command(make, &build_dir, &num_jobs);
+        cmd.env("CC", &cc_safe);
         for (k, v) in &msvc_env {
             cmd.env(k, v);
         }

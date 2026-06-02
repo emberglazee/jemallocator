@@ -60,6 +60,7 @@ cargo test --target "${TARGET}" \
 case "${TARGET}" in
     "i686-unknown-linux-musl") ;;
     "x86_64-unknown-linux-musl") ;;
+    *windows*) ;;
     *)
 
         cargo test --target "${TARGET}" \

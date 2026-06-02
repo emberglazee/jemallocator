@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - 'master'
@@ -18,11 +19,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: x86_64-apple-darwin
-            target: x86_64-apple-darwin
-            nobgt: 0
-            no_tests: 1
-            tag: macos-13
           - name: x86_64-unknown-linux-gnu (nightly)
             target: x86_64-unknown-linux-gnu
             nobgt: 0
@@ -35,22 +31,11 @@ jobs:
             no_tests: 0
             rust: stable
             tag: ubuntu-latest
-          - name: x86_64-unknown-linux-musl
-            target: x86_64-unknown-linux-musl
-            nobgt: 1
-            no_tests: 1
-            tag: ubuntu-latest
           - name: aarch64-apple-darwin (stable)
             target: aarch64-apple-darwin
             nobgt: 0
             no_tests: 1
             tag: macos-latest
-          - name: x86_64-unknown-linux-gnu (msrv)
-            target: x86_64-unknown-linux-gnu
-            nobgt: 0
-            no_tests: 0
-            rust: msrv
-            tag: ubuntu-latest
           - name: x86_64-pc-windows-msvc
             target: x86_64-pc-windows-msvc
             nobgt: 1
@@ -62,7 +47,7 @@ jobs:
       NO_JEMALLOC_TESTS: ${{ matrix.no_tests }}
       NOBGT: ${{ matrix.nobgt }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: true
     - name: install
@@ -71,30 +56,15 @@ jobs:
         if [[ "${{ matrix.rust }}" == "nightly" ]]; then
             rustup default nightly
         fi
-        if [[ "${{ matrix.rust }}" == "msrv" ]]; then
-            rustup default `grep rust-version jemalloc-sys/Cargo.toml | cut -d '"' -f 2`
-        fi
         rustup target add ${{ matrix.target }}
-        if [[ "$TARGET" == "x86_64-unknown-linux-musl" ]]; then
-          sudo apt install -y musl-tools
-        fi
     - name: test
       shell: bash
       run: sh ci/run.sh
-  test_bench:
-    name: Benchmarks using x86_64-unknown-linux-gnu (nightly)
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: true
-    - run: rustup default nightly
-    - run: cargo test --bench roundtrip
   check:
     name: Rustfmt and Clippy
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: true
     - run: rustup component add rustfmt clippy

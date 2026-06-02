@@ -32,9 +32,7 @@ fn make_cc_safe(path: &std::ffi::OsStr) -> std::ffi::OsString {
     }
     let wide: Vec<u16> = path.encode_wide().chain(std::iter::once(0)).collect();
     let mut buf = vec![0u16; 260];
-    let len = unsafe {
-        GetShortPathNameW(wide.as_ptr(), buf.as_mut_ptr(), buf.len() as u32)
-    };
+    let len = unsafe { GetShortPathNameW(wide.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
     if len > 0 && (len as usize) < buf.len() {
         buf.truncate(len as usize);
         OsStringExt::from_wide(&buf)
@@ -257,9 +255,9 @@ fn main() {
         cmd.env(k, v);
     }
     cmd.arg(format!("--with-version={je_version}"))
-    .arg("--disable-cxx")
-    .arg("--enable-doc=no")
-    .arg("--enable-shared=no");
+        .arg("--disable-cxx")
+        .arg("--enable-doc=no")
+        .arg("--enable-shared=no");
 
     if target.contains("ios") {
         // newer iOS deviced have 16kb page sizes:

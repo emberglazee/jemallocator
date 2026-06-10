@@ -458,6 +458,27 @@ fn main() {
         run(cmd.arg("install_lib_static").arg("install_include"));
     }
 
+    // Debug: list installed libraries
+    let lib_dir = out_dir.join("lib");
+    if lib_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&lib_dir) {
+            for entry in entries.flatten() {
+                warning!("installed: {}", entry.path().display());
+            }
+        }
+    } else {
+        warning!("LIB_DIR {:?} does not exist", lib_dir);
+        // Also check the build dir for libraries
+        let bdir = out_dir.join("build").join("lib");
+        if bdir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&bdir) {
+                for entry in entries.flatten() {
+                    warning!("build_lib: {}", entry.path().display());
+                }
+            }
+        }
+    }
+
     // Try to remove the build directory to avoid it wasting disk space in the target directory
     let _ = fs::remove_dir_all(build_dir);
 
@@ -470,11 +491,7 @@ fn main() {
     // Currently jemalloc is compiled with gcc which will generate calls to
     // intrinsics that are libgcc specific (e.g. those intrinsics aren't present in
     // libcompiler-rt), so link that in to get that support.
-    if target.contains("windows") {
-        println!("cargo:rustc-link-lib=static=jemalloc");
-    } else {
-        println!("cargo:rustc-link-lib=static=jemalloc_pic");
-    }
+    println!("cargo:rustc-link-lib=static=jemalloc_pic");
     println!("cargo:rustc-link-search=native={}/lib", out_dir.display());
     if target.contains("android") {
         println!("cargo:rustc-link-lib=gcc");

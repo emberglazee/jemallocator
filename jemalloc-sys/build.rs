@@ -18,6 +18,50 @@ use std::{
 
 include!("src/env.rs");
 
+/// Convert a path to its 8.3 short form on Windows to avoid
+/// space-splitting when passed through `sh`/configure scripts.
+#[cfg(target_os = "windows")]
+fn make_cc_safe(path: &std::ffi::OsStr) -> std::ffi::OsString {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    extern "system" {
+        fn GetShortPathNameW(
+            lpszLongPath: *const u16,
+            lpszShortPath: *mut u16,
+            cchBuffer: u32,
+        ) -> u32;
+    }
+    let wide: Vec<u16> = path.encode_wide().chain(std::iter::once(0)).collect();
+    let mut buf = vec![0u16; 260];
+    let len = unsafe { GetShortPathNameW(wide.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
+    if len > 0 && (len as usize) < buf.len() {
+        buf.truncate(len as usize);
+        OsStringExt::from_wide(&buf)
+    } else {
+        path.to_os_string()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn make_cc_safe(path: &std::ffi::OsStr) -> std::ffi::OsString {
+    path.to_os_string()
+}
+
+/// Convert all entries in a PATH-like string to short 8.3 form on Windows.
+/// This prevents MSYS2 bash from splitting on spaces in paths like
+/// `C:\Program Files\Microsoft Visual Studio\...`.
+#[cfg(target_os = "windows")]
+fn make_path_safe(path_str: &std::ffi::OsStr) -> OsString {
+    let entries: Vec<OsString> = std::env::split_paths(path_str)
+        .map(|p| make_cc_safe(p.as_os_str()))
+        .collect();
+    std::env::join_paths(entries).unwrap_or_else(|_| path_str.to_os_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn make_path_safe(path_str: &std::ffi::OsStr) -> OsString {
+    path_str.to_os_string()
+}
+
 macro_rules! info {
     ($($args:tt)*) => { println!($($args)*) }
 }
@@ -176,6 +220,41 @@ fn main() {
     info!("LDFLAGS={:?}", ldflags);
     info!("CPPFLAGS={:?}", cppflags);
 
+    // On MSVC targets, the cc crate sets up LIB, INCLUDE, and PATH
+    // environment variables internally (via find-msvc-tools). Forward
+    // these to configure — otherwise `sh` → configure → cl.exe won't
+    // find MSVCRT.lib during the C-compiler-works test.
+    let msvc_env: Vec<(OsString, OsString)> = {
+        let cc_cmd = compiler.to_command();
+        let envs: Vec<_> = cc_cmd
+            .get_envs()
+            .filter_map(|(k, v)| v.map(|v| (k.to_owned(), v.to_owned())))
+            .collect();
+        for (k, v) in &envs {
+            info!("msvc_env: {:?}={:?}", k, v);
+        }
+        if envs.is_empty() {
+            info!("msvc_env: (none captured — will fall back to process env)");
+        }
+        info!("msvc_env: captured {} env vars from cc Tool", envs.len());
+        // Sanitize PATH entries to short 8.3 form to prevent MSYS2
+        // bash from splitting on spaces (e.g. "C:/Program Files/...").
+        envs.into_iter()
+            .map(|(k, v)| {
+                if k.to_str() == Some("PATH") || k.to_str() == Some("Path") {
+                    let safe = make_path_safe(&v);
+                    info!("msvc_env: PATH sanitized: {:?} -> {:?}", v, safe);
+                    (k, safe)
+                } else {
+                    (k, v)
+                }
+            })
+            .collect()
+    };
+
+    let cc_safe = make_cc_safe(&cc);
+    info!("CC_SAFE={:?}", cc_safe);
+
     assert!(out_dir.exists(), "OUT_DIR does not exist");
     let jemalloc_repo_dir = PathBuf::from("jemalloc");
     info!("JEMALLOC_REPO_DIR={:?}", jemalloc_repo_dir);
@@ -208,11 +287,14 @@ fn main() {
             .replace('\\', "/"),
     )
     .current_dir(&build_dir)
-    .env("CC", &cc)
+    .env("CC", &cc_safe)
     .env("CFLAGS", &cflags)
     .env("LDFLAGS", &ldflags)
-    .env("CPPFLAGS", &cppflags)
-    .arg(format!("--with-version={je_version}"))
+    .env("CPPFLAGS", &cppflags);
+    for (k, v) in &msvc_env {
+        cmd.env(k, v);
+    }
+    cmd.arg(format!("--with-version={je_version}"))
     .arg("--disable-cxx")
     .arg("--enable-doc=no")
     .arg("--enable-shared=no");
@@ -332,25 +414,49 @@ fn main() {
 
     // Make:
     let make = make_cmd(&host);
-    run(&mut make_command(make, &build_dir, &num_jobs));
+    {
+        let mut cmd = make_command(make, &build_dir, &num_jobs);
+        cmd.env("CC", &cc_safe);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
+        info!("make: running {} in {:?}", make, build_dir);
+        run(&mut cmd);
+    }
 
     // Skip watching this environment variables to avoid rebuild in CI.
     if env::var("JEMALLOC_SYS_RUN_JEMALLOC_TESTS").is_ok() {
         info!("Building and running jemalloc tests...");
 
         let mut cmd = make_command(make, &build_dir, &num_jobs);
+        cmd.env("CC", &cc_safe);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
 
         // Make tests:
         run(cmd.arg("tests"));
 
         // Run tests:
-        run(Command::new(make).current_dir(&build_dir).arg("check"));
+        let mut cmd = Command::new(make);
+        cmd.current_dir(&build_dir);
+        cmd.env("CC", &cc_safe);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
+        run(cmd.arg("check"));
     }
 
     // Make install:
-    run(make_command(make, &build_dir, &num_jobs)
-        .arg("install_lib_static")
-        .arg("install_include"));
+    {
+        let mut cmd = make_command(make, &build_dir, &num_jobs);
+        cmd.env("CC", &cc_safe);
+        for (k, v) in &msvc_env {
+            cmd.env(k, v);
+        }
+        info!("make: install_lib_static install_include starting...");
+        run(cmd.arg("install_lib_static").arg("install_include"));
+    }
 
     // Try to remove the build directory to avoid it wasting disk space in the target directory
     let _ = fs::remove_dir_all(build_dir);
@@ -365,7 +471,7 @@ fn main() {
     // intrinsics that are libgcc specific (e.g. those intrinsics aren't present in
     // libcompiler-rt), so link that in to get that support.
     if target.contains("windows") {
-        println!("cargo:rustc-link-lib=static=jemalloc");
+        println!("cargo:rustc-link-lib=static=jemalloc_s");
     } else {
         println!("cargo:rustc-link-lib=static=jemalloc_pic");
     }
@@ -448,8 +554,8 @@ fn execute(cmd: &mut Command, on_fail: impl FnOnce()) {
 
 fn gnu_target(target: &str) -> String {
     match target {
-        "i686-pc-windows-msvc" => "i686-pc-win32".to_string(),
-        "x86_64-pc-windows-msvc" => "x86_64-pc-win32".to_string(),
+        "i686-pc-windows-msvc" => "i686-w64-mingw32".to_string(),
+        "x86_64-pc-windows-msvc" => "x86_64-w64-mingw32".to_string(),
         "i686-pc-windows-gnu" | "i686-pc-windows-gnullvm" => "i686-w64-mingw32".to_string(),
         "x86_64-pc-windows-gnu" | "x86_64-pc-windows-gnullvm" => "x86_64-w64-mingw32".to_string(),
         "aarch64-pc-windows-gnullvm" => "aarch64-w64-mingw32".to_string(),

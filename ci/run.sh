@@ -24,27 +24,41 @@ else
     export JEMALLOC_SYS_RUN_JEMALLOC_TESTS=1
 fi
 
-cargo build --target "${TARGET}"
-cargo test --target "${TARGET}"
-cargo test --target "${TARGET}" --features profiling
-cargo test --target "${TARGET}" --features debug
-cargo test --target "${TARGET}" --features stats
-cargo test --target "${TARGET}" --features 'debug profiling'
+# On Windows, jemalloc-sys test binaries / test-dylib / jemalloc-ctl all
+# reference POSIX-only functions (aligned_alloc, posix_memalign, dlfcn.h).
+# Build everything to prove compilation, but skip workspace tests.
+case "${TARGET}" in
+    *windows*)
+        echo "Windows: building workspace (compilation check), testing only jemallocator-global"
+        cargo build --workspace --target "${TARGET}" --exclude test-dylib
+        cargo test --target "${TARGET}" --manifest-path jemallocator-global/Cargo.toml
+        exit 0
+        ;;
+    *)
+        ;;
+esac
 
-cargo test --target "${TARGET}" \
+cargo build --workspace --target "${TARGET}"
+cargo test --workspace --target "${TARGET}"
+cargo test --workspace --target "${TARGET}" --features profiling
+cargo test --workspace --target "${TARGET}" --features debug
+cargo test --workspace --target "${TARGET}" --features stats
+cargo test --workspace --target "${TARGET}" --features 'debug profiling'
+
+cargo test --workspace --target "${TARGET}" \
     --features override_allocator_on_supported_platforms
-cargo test --target "${TARGET}" --no-default-features
-cargo test --target "${TARGET}" --no-default-features \
+cargo test --workspace --target "${TARGET}" --no-default-features
+cargo test --workspace --target "${TARGET}" --no-default-features \
     --features background_threads_runtime_support
 
 if [ "${NOBGT}" = "1" ]
 then
     echo "enabling background threads by default at run-time is not tested"
 else
-    cargo test --target "${TARGET}" --features background_threads
+    cargo test --workspace --target "${TARGET}" --features background_threads
 fi
 
-cargo test --target "${TARGET}" --release
+cargo test --workspace --target "${TARGET}" --release
 cargo test --target "${TARGET}" --manifest-path jemalloc-sys/Cargo.toml
 cargo test --target "${TARGET}" \
              --manifest-path jemalloc-sys/Cargo.toml \
@@ -59,29 +73,20 @@ case "${TARGET}" in
         cargo test --target "${TARGET}" \
                    --manifest-path jemalloc-ctl/Cargo.toml \
                    --no-default-features
-        # FIXME: cross fails to pass features to jemalloc-ctl
-        # ${CARGO_CMD} test --target "${TARGET}" \
-        #             --manifest-path jemalloc-ctl \
-        #             --no-default-features --features use_std
         ;;
 esac
 
-cargo test --target "${TARGET}" --manifest-path jemallocator-global/Cargo.toml
+cargo test --target "${TARGET}" \
+             --manifest-path jemallocator-global/Cargo.toml
 cargo test --target "${TARGET}" \
              --manifest-path jemallocator-global/Cargo.toml \
              --features force_global_jemalloc
-
-# FIXME: Re-enable following test when allocator API is stable again.
-# if [ "${TRAVIS_RUST_VERSION}" = "nightly"  ]
-# then
-#     # The Alloc trait is unstable:
-#     ${CARGO_CMD} test --target "${TARGET}" --features alloc_trait
-# fi
 
 # Test that overriding works in dylibs.
 case "$TARGET" in
     "i686-unknown-linux-musl") ;;
     "x86_64-unknown-linux-musl") ;;
+    *windows*) ;;
     *)
         cargo run --target "${TARGET}" \
             -p test-dylib \

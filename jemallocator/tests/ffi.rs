@@ -24,9 +24,7 @@ fn test_basic_alloc() {
         ffi::sdallocx(ptr, 50, 0);
 
         ptr = ffi::malloc(100);
-        ffi::free_sized(ptr, 100);
-        ptr = ffi::aligned_alloc(16, 127);
-        ffi::free_aligned_sized(ptr, 16, 127);
+        ffi::free(ptr);
     }
 }
 

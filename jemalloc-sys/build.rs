@@ -295,9 +295,9 @@ fn main() {
         cmd.env(k, v);
     }
     cmd.arg(format!("--with-version={je_version}"))
-    .arg("--disable-cxx")
-    .arg("--enable-doc=no")
-    .arg("--enable-shared=no");
+        .arg("--disable-cxx")
+        .arg("--enable-doc=no")
+        .arg("--enable-shared=no");
 
     if target.contains("ios") {
         // newer iOS deviced have 16kb page sizes:

@@ -276,6 +276,22 @@ fn main() {
             .expect("failed to copy config file to OUT_DIR");
     }
 
+    // aarch64 MSVC: upstream jemalloc guards aarch64 virtual-address behavior
+    // behind `__aarch64__`; MSVC defines `_M_ARM64` instead. Patch the vendored
+    // rtree.h in the build dir so the aarch64 (zero-extend) path is used.
+    if target == "aarch64-pc-windows-msvc" {
+        let rtree = build_dir.join("include/jemalloc/internal/rtree.h");
+        let content = fs::read_to_string(&rtree)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", rtree.display()));
+        let anchor = "#    ifdef __aarch64__\n";
+        if !content.contains(anchor) {
+            panic!("rtree.h aarch64 anchor not found — jemalloc submodule rev changed?");
+        }
+        let patched =
+            content.replace(anchor, "#    if defined(__aarch64__) || defined(_M_ARM64)\n");
+        fs::write(&rtree, patched).expect("failed to write patched rtree.h");
+    }
+
     // Run configure:
     let configure = build_dir.join("configure");
     let mut cmd = Command::new("sh");
@@ -303,6 +319,14 @@ fn main() {
         // newer iOS deviced have 16kb page sizes:
         // closed: https://github.com/gnzlbg/jemallocator/issues/68
         cmd.arg("--with-lg-page=14");
+    }
+
+    if target == "aarch64-pc-windows-msvc" {
+        // MSVC defines `_M_ARM64` instead of `__aarch64__`, so upstream
+        // jemalloc's quantum.h falls through to its `#error "Unknown minimum
+        // alignment"`. Passing --with-lg-quantum makes configure define
+        // LG_QUANTUM, bypassing the header guard entirely.
+        cmd.arg("--with-lg-quantum=4");
     }
 
     // collect `malloc_conf` string:
